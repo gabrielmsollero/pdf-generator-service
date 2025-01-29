@@ -1,0 +1,9 @@
+services:
+  pdf_generator:
+    extends:
+      file: compose.yml
+      service: pdf_generator
+    build:
+      target: development
+    volumes:
+      - ./app:/srv/app/

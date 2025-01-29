@@ -1,0 +1,7 @@
+services:
+  pdf_generator:
+    build:
+      context: app
+      target: production
+    ports:
+      - "${PORT-3000}:80" # 3000 by default - can be changed in .env file
