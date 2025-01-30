@@ -1,0 +1,32 @@
+@hostname = localhost
+@port = 3000
+@host = {{hostname}}:{{port}}
+
+# @name generateDummyInvoice
+POST http://{{host}}/invoice
+Content-Type: application/json
+
+{
+    "invoice_number": "12345",
+    "account_number": "123456789012",
+    "total_due": 5000.00,
+    "emission_date": "2024/11/30",
+    "due_by": "2024/12/01",
+    "items": [
+        {
+        "description": "Website design",
+        "unit_price": 34.2,
+        "quantity": 100
+        },
+        {
+        "description": "Website development",
+        "unit_price": 45.5,
+        "quantity": 99
+        },
+        {
+        "description": "Website integration",
+        "unit_price": 62.2,
+        "quantity": 89
+        }
+    ]
+}
