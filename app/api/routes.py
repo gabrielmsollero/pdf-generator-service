@@ -11,11 +11,11 @@ from marshmallow import Schema, ValidationError
 from weasyprint import HTML
 from werkzeug.exceptions import HTTPException
 
+from app.config import Config
+
 blueprint = Blueprint("api", __name__)
 
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "../templates")
-
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+env = Environment(loader=FileSystemLoader(Config.TEMPLATES_DIR))
 
 
 def register_route_for_template(template_name: str):
@@ -30,11 +30,11 @@ def register_route_for_template(template_name: str):
         )
 
     try:
-        template = env.get_template(f"{template_name}/index.html")
+        template = env.get_template(f"{template_name}/{Config.TEMPLATE_FILE_NAME}")
     except TemplateNotFound:
         logging.error(
             f"error while loading HTML file for template '{template_name}'. "
-            "Make sure there is an index.html file inside the template folder."
+            f"Make sure there is an {Config.TEMPLATE_FILE_NAME} file inside the template folder."
         )
 
     def route_handler():
@@ -52,7 +52,7 @@ def register_route_for_template(template_name: str):
 
             logger.info("writing to PDF")
             pdf_buffer = io.BytesIO()  # alternative to temp file
-            css_file_path = os.path.join(TEMPLATE_DIR, template_name, "style.css")
+            css_file_path = os.path.join(Config.TEMPLATES_DIR, template_name, Config.STYLESHEETS_FILE_NAME)
             HTML(string=html_str).write_pdf(
                 pdf_buffer, stylesheets=[css_file_path] if os.path.exists(css_file_path) else []
             )
@@ -72,5 +72,5 @@ def register_route_for_template(template_name: str):
     blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=route_handler, methods=["POST"])
 
 
-for folder_name in os.listdir(TEMPLATE_DIR):
+for folder_name in os.listdir(Config.TEMPLATES_DIR):
     register_route_for_template(folder_name)
