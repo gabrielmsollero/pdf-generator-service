@@ -9,7 +9,7 @@ from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
 from marshmallow import Schema, ValidationError
 from weasyprint import HTML
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, InternalServerError
 
 from app.config import Config
 
@@ -62,14 +62,19 @@ def register_route_for_template(template_name: str):
                 pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{template_name}.pdf"
             )
         except HTTPException as e:
-            logger.info(f"http exception while processing request: {e.description}")
-            return jsonify({"error": e.description}), e.code
+            raise e
         except Exception as e:
             logger.exception(f"unexpected error while processing request:")
-            return jsonify({"error": str(e)}), 500
+            raise InternalServerError(str(e))
 
     blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=route_handler, methods=["POST"])
 
 
 for folder_name in os.listdir(Config.TEMPLATES_DIR):
     register_route_for_template(folder_name)
+
+
+@blueprint.app_errorhandler(HTTPException)
+def handle_http_exception(e: HTTPException):
+    current_app.logger.info(f"http exception: {str(e)}")
+    return jsonify({"error": e.description}), e.code
