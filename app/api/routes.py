@@ -15,8 +15,6 @@ from app.config import Config
 
 blueprint = Blueprint("api", __name__)
 
-env = Environment(loader=FileSystemLoader(Config.TEMPLATES_DIR))
-
 
 def register_route_for_template(template_name: str):
     try:
@@ -29,8 +27,9 @@ def register_route_for_template(template_name: str):
             f"file containing a schema variable of type {Schema} inside the template folder."
         )
 
+    env = Environment(loader=FileSystemLoader(os.path.join(Config.TEMPLATES_DIR, template_name)))
     try:
-        template = env.get_template(f"{template_name}/{Config.TEMPLATE_FILE_NAME}")
+        template = env.get_template(Config.TEMPLATE_FILE_NAME)
     except TemplateNotFound:
         logging.error(
             f"error while loading HTML file for template '{template_name}'. "
