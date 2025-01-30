@@ -25,9 +25,9 @@
 
     <dl id="informations">
       <dt>Invoice number</dt>
-      <dd>12345</dd>
+      <dd>{{ invoice_number }}</dd>
       <dt>Date</dt>
-      <dd>March 31, 2018</dd>
+      <dd>{{ emission_date.strftime('%m/%d/%Y') }}</dd>
     </dl>
 
     <table>
@@ -40,24 +40,14 @@
         </tr>
       </thead>
       <tbody>
+        {% for item in items %}
         <tr>
-          <td>Website design</td>
-          <td>€34.20</td>
-          <td>100</td>
-          <td>€3,420.00</td>
+          <td>{{ item.description }}</td>
+          <td>€{{ "%.2f"|format(item.unit_price) }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>€{{ "%.2f"|format(item.unit_price * item.quantity) }}</td>
         </tr>
-        <tr>
-          <td>Website development</td>
-          <td>€45.50</td>
-          <td>100</td>
-          <td>€4,550.00</td>
-        </tr>
-        <tr>
-          <td>Website integration</td>
-          <td>€25.75</td>
-          <td>100</td>
-          <td>€2,575.00</td>
-        </tr>
+        {% endfor %}
       </tbody>
     </table>
 
@@ -72,9 +62,9 @@
         </thead>
         <tbody>
           <tr>
-            <td>May 10, 2018</td>
-            <td>132 456 789 012</td>
-            <td>€10,545.00</td>
+            <td>{{ due_by.strftime('%m/%d/%Y') }}</td>
+            <td>{{ account_number }}</td>
+            <td>€{{ "%.2f"|format(total_due) }}</td>
           </tr>
         </tbody>
       </table>
