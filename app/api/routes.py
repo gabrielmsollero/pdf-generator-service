@@ -1,10 +1,9 @@
 import io
-import json
 import os
-from datetime import date
 
-from flask import Blueprint, jsonify, send_file
+from flask import Blueprint, jsonify, request, send_file
 from jinja2 import Environment, FileSystemLoader
+from marshmallow import Schema, fields, ValidationError
 from weasyprint import HTML
 
 blueprint = Blueprint("api", __name__)
@@ -12,38 +11,35 @@ blueprint = Blueprint("api", __name__)
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "../templates")
 
 
-@blueprint.route("/invoice", methods=["GET"])
+class InvoiceItemSchema(Schema):
+    description = fields.String(required=True)
+    unit_price = fields.Float(required=True)
+    quantity = fields.Integer(required=True)
+
+
+class InvoiceSchema(Schema):
+    invoice_number = fields.String(required=True)
+    account_number = fields.String(required=True)
+    emission_date = fields.Date(required=True, format="%Y/%m/%d")
+    due_by = fields.Date(required=True, format="%Y/%m/%d")
+    total_due = fields.Float(required=True)
+    items = fields.List(fields.Nested(InvoiceItemSchema), required=True)
+
+
+invoice_schema = InvoiceSchema()
+
+
+@blueprint.route("/invoice", methods=["POST"])
 def invoice():
     try:
+        try:
+            data = invoice_schema.load(request.json)
+        except ValidationError as err:
+            return jsonify({"error": err.messages}), 400
+
         env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
         template = env.get_template("invoice/index.html")
-        data = json.loads(
-            """
-        {
-            "invoice_number": "12345",
-            "account_number": "123456789012",
-            "total_due": 5000.00,
-            "items": [
-                {
-                "description": "Website design",
-                "unit_price": 34.2,
-                "quantity": 100
-                },
-                {
-                "description": "Website development",
-                "unit_price": 45.5,
-                "quantity": 99
-                },
-                {
-                "description": "Website integration",
-                "unit_price": 62.2,
-                "quantity": 89
-                }
-            ]
-        }
-        """
-        )
-        html_str = template.render(**data, emission_date=date(2024, 11, 30), due_by=date(2024, 12, 1))
+        html_str = template.render(**data)
 
         pdf_buffer = io.BytesIO()  # alternative to temp file
         HTML(string=html_str).write_pdf(pdf_buffer, stylesheets=[os.path.join(TEMPLATE_DIR, "invoice", "style.css")])
