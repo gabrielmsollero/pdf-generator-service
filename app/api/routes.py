@@ -1,10 +1,13 @@
-import json
 import io
+import json
+import logging
 import os
+from importlib import import_module
 
 from flask import current_app, Blueprint, jsonify, request, send_file
 from jinja2 import Environment, FileSystemLoader
-from marshmallow import Schema, fields, ValidationError
+from jinja2.exceptions import TemplateNotFound
+from marshmallow import Schema, ValidationError
 from weasyprint import HTML
 from werkzeug.exceptions import HTTPException
 
@@ -12,53 +15,62 @@ blueprint = Blueprint("api", __name__)
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "../templates")
 
-
-class InvoiceItemSchema(Schema):
-    description = fields.String(required=True)
-    unit_price = fields.Float(required=True)
-    quantity = fields.Integer(required=True)
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
-class InvoiceSchema(Schema):
-    invoice_number = fields.String(required=True)
-    account_number = fields.String(required=True)
-    emission_date = fields.Date(required=True, format="%Y/%m/%d")
-    due_by = fields.Date(required=True, format="%Y/%m/%d")
-    total_due = fields.Float(required=True)
-    items = fields.List(fields.Nested(InvoiceItemSchema), required=True)
-
-
-invoice_schema = InvoiceSchema()
-
-
-@blueprint.route("/invoice", methods=["POST"])
-def invoice():
-    logger = current_app.logger
+def register_route_for_template(template_name: str):
     try:
-        logger.info(f"receiving request for template 'invoice'")
-        logger.info(json.dumps(request.json, indent=2))
+        schema: Schema = import_module(f"app.templates.{template_name}.schema").schema
+        if not isinstance(schema, Schema):
+            raise TypeError(f"schema must be an instance of {Schema}, not {type(schema)}")
+    except (ModuleNotFoundError, AttributeError, TypeError):
+        logging.error(
+            f"error while loading schema for template '{template_name}'. Make sure there is a schema.py "
+            f"file containing a schema variable of type {Schema} inside the template folder."
+        )
+
+    try:
+        template = env.get_template(f"{template_name}/index.html")
+    except TemplateNotFound:
+        logging.error(
+            f"error while loading HTML file for template '{template_name}'. "
+            "Make sure there is an index.html file inside the template folder."
+        )
+
+    def route_handler():
+        logger = current_app.logger
         try:
-            data = invoice_schema.load(request.json)
-        except ValidationError as err:
-            logger.info("validation error while processing request body")
-            logger.info(json.dumps(err.messages, indent=2))
-            return jsonify({"error": err.messages}), 400
+            logger.info(f"receiving request for template '{template_name}': {json.dumps(request.json, indent=2)}")
+            try:
+                data = schema.load(request.json)
+            except ValidationError as err:
+                logger.info(f"validation error while processing request body: {json.dumps(err.messages, indent=2)}")
+                return jsonify({"error": err.messages}), 400
 
-        env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-        template = env.get_template("invoice/index.html")
-        logger.info("rendering document")
-        html_str = template.render(**data)
+            logger.info("rendering document")
+            html_str = template.render(**data)
 
-        logger.info("writing to PDF")
-        pdf_buffer = io.BytesIO()  # alternative to temp file
-        HTML(string=html_str).write_pdf(pdf_buffer, stylesheets=[os.path.join(TEMPLATE_DIR, "invoice", "style.css")])
-        pdf_buffer.seek(0)
+            logger.info("writing to PDF")
+            pdf_buffer = io.BytesIO()  # alternative to temp file
+            css_file_path = os.path.join(TEMPLATE_DIR, template_name, "style.css")
+            HTML(string=html_str).write_pdf(
+                pdf_buffer, stylesheets=[css_file_path] if os.path.exists(css_file_path) else []
+            )
+            pdf_buffer.seek(0)
 
-        logger.info("sending response")
-        return send_file(pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name="document.pdf")
-    except HTTPException as e:
-        logger.info(f"http exception while processing request: {e.description}")
-        return jsonify({"error": e.description}), e.code
-    except Exception as e:
-        logger.exception(f"unexpected error while processing request:")
-        return jsonify({"error": str(e)}), 500
+            logger.info("sending response")
+            return send_file(
+                pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{template_name}.pdf"
+            )
+        except HTTPException as e:
+            logger.info(f"http exception while processing request: {e.description}")
+            return jsonify({"error": e.description}), e.code
+        except Exception as e:
+            logger.exception(f"unexpected error while processing request:")
+            return jsonify({"error": str(e)}), 500
+
+    blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=route_handler, methods=["POST"])
+
+
+for folder_name in os.listdir(TEMPLATE_DIR):
+    register_route_for_template(folder_name)
