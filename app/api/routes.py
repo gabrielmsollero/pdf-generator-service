@@ -25,6 +25,14 @@ def register_route_for_template(template_name: str):
         if not isinstance(schema, Schema):
             raise TypeError(f"schema must be an instance of {Schema}, not {type(schema)}")
 
+        try:
+            additional_data: dict = schema_module.additional_data
+            if not isinstance(additional_data, dict):
+                raise TypeError(f"additional_data must be an instance of {dict}, not {type(additional_data)}")
+        except AttributeError:
+            additional_data = {}
+        logger.info(f"additional data: {json.dumps(additional_data, indent=2)}")
+
         env = Environment(loader=FileSystemLoader(os.path.join(Config.TEMPLATES_DIR, template_name)))
         template = env.get_template(Config.TEMPLATE_FILE_NAME)
     except ModuleNotFoundError:
@@ -58,7 +66,7 @@ def register_route_for_template(template_name: str):
                 return jsonify({"error": err.messages}), 400
 
             logger.info("rendering document")
-            html_str = template.render(**data)
+            html_str = template.render(**(data | additional_data))
 
             logger.info("writing to PDF")
             pdf_buffer = io.BytesIO()  # alternative to temp file
