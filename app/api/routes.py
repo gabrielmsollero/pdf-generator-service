@@ -4,7 +4,7 @@ import os
 from importlib import import_module
 
 from flask import Blueprint, current_app, jsonify, request, send_file
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
 from jinja2.exceptions import TemplateNotFound
 from marshmallow import Schema, ValidationError
 from weasyprint import HTML
@@ -13,6 +13,41 @@ from werkzeug.exceptions import HTTPException, InternalServerError
 from app.config import build_time_logger, Config
 
 blueprint = Blueprint("api", __name__)
+
+
+def generate_view_func(template_name: str, template: Template, schema: Schema, additional_data: dict):
+    def view_func():
+        logger = current_app.logger
+        try:
+            logger.info(f"receiving request for template '{template_name}': {json.dumps(request.json, indent=2)}")
+            try:
+                data = schema.load(request.json)
+            except ValidationError as err:
+                logger.info(f"validation error while processing request body: {json.dumps(err.messages, indent=2)}")
+                return jsonify({"error": err.messages}), 400
+
+            logger.info("rendering document")
+            html_str = template.render(**(data | additional_data))
+
+            logger.info("writing to PDF")
+            pdf_buffer = io.BytesIO()  # alternative to temp file
+            css_file_path = os.path.join(Config.TEMPLATES_DIR, template_name, Config.STYLESHEETS_FILE_NAME)
+            HTML(string=html_str).write_pdf(
+                pdf_buffer, stylesheets=[css_file_path] if os.path.exists(css_file_path) else []
+            )
+            pdf_buffer.seek(0)
+
+            logger.info("sending response")
+            return send_file(
+                pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{template_name}.pdf"
+            )
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            logger.exception(f"unexpected error while processing request:")
+            raise InternalServerError(str(e))
+
+    return view_func
 
 
 def register_route_for_template(template_name: str):
@@ -55,38 +90,9 @@ def register_route_for_template(template_name: str):
             )
             return
 
-    def route_handler():
-        logger = current_app.logger
-        try:
-            logger.info(f"receiving request for template '{template_name}': {json.dumps(request.json, indent=2)}")
-            try:
-                data = schema.load(request.json)
-            except ValidationError as err:
-                logger.info(f"validation error while processing request body: {json.dumps(err.messages, indent=2)}")
-                return jsonify({"error": err.messages}), 400
+    view_func = generate_view_func(template_name, template, schema, additional_data)
 
-            logger.info("rendering document")
-            html_str = template.render(**(data | additional_data))
-
-            logger.info("writing to PDF")
-            pdf_buffer = io.BytesIO()  # alternative to temp file
-            css_file_path = os.path.join(Config.TEMPLATES_DIR, template_name, Config.STYLESHEETS_FILE_NAME)
-            HTML(string=html_str).write_pdf(
-                pdf_buffer, stylesheets=[css_file_path] if os.path.exists(css_file_path) else []
-            )
-            pdf_buffer.seek(0)
-
-            logger.info("sending response")
-            return send_file(
-                pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{template_name}.pdf"
-            )
-        except HTTPException as e:
-            raise e
-        except Exception as e:
-            logger.exception(f"unexpected error while processing request:")
-            raise InternalServerError(str(e))
-
-    blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=route_handler, methods=["POST"])
+    blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=view_func, methods=["POST"])
     logger.info("route built successfully")
 
 
