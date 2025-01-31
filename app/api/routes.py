@@ -1,40 +1,51 @@
 import io
 import json
-import logging
 import os
 from importlib import import_module
 
-from flask import current_app, Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
 from marshmallow import Schema, ValidationError
 from weasyprint import HTML
 from werkzeug.exceptions import HTTPException, InternalServerError
 
-from app.config import Config
+from app.config import build_time_logger, Config
 
 blueprint = Blueprint("api", __name__)
 
 
 def register_route_for_template(template_name: str):
+    logger = build_time_logger
+    logger.info(f"building route for template '{template_name}'")
+    error_msg = None
     try:
-        schema: Schema = import_module(f"app.templates.{template_name}.schema").schema
+        schema_module = import_module(f"app.templates.{template_name}.schema")
+        schema: Schema = schema_module.schema
         if not isinstance(schema, Schema):
             raise TypeError(f"schema must be an instance of {Schema}, not {type(schema)}")
-    except (ModuleNotFoundError, AttributeError, TypeError):
-        logging.error(
-            f"error while loading schema for template '{template_name}'. Make sure there is a schema.py "
-            f"file containing a schema variable of type {Schema} inside the template folder."
-        )
 
-    env = Environment(loader=FileSystemLoader(os.path.join(Config.TEMPLATES_DIR, template_name)))
-    try:
+        env = Environment(loader=FileSystemLoader(os.path.join(Config.TEMPLATES_DIR, template_name)))
         template = env.get_template(Config.TEMPLATE_FILE_NAME)
-    except TemplateNotFound:
-        logging.error(
-            f"error while loading HTML file for template '{template_name}'. "
-            f"Make sure there is an {Config.TEMPLATE_FILE_NAME} file inside the template folder."
+    except ModuleNotFoundError:
+        error_msg = (
+            "could not find schema module for template. Make sure there is a schema.py file inside the template folder"
         )
+    except AttributeError:
+        error_msg = "could not find a variable named 'schema' inside the schema module"
+    except TypeError as e:
+        error_msg = str(e)
+    except TemplateNotFound:
+        error_msg = f"could not find a template file named '{Config.TEMPLATE_FILE_NAME}' inside the template folder"
+    except Exception as e:
+        logger.exception("unexpected error while building route:")
+        error_msg = str(e)
+    finally:
+        if error_msg:
+            logger.error(
+                f"error while building route: {error_msg}. This template will be skipped and won't be available."
+            )
+            return
 
     def route_handler():
         logger = current_app.logger
@@ -68,6 +79,7 @@ def register_route_for_template(template_name: str):
             raise InternalServerError(str(e))
 
     blueprint.add_url_rule(rule=template_name, endpoint=template_name, view_func=route_handler, methods=["POST"])
+    logger.info("route built successfully")
 
 
 for folder_name in os.listdir(Config.TEMPLATES_DIR):
