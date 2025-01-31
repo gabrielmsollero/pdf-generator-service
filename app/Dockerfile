@@ -1,39 +1,60 @@
-####################### BASE IMAGE #######################
+######################## BASE IMAGE #######################
 
 FROM python:3.12-slim AS base
 
 EXPOSE 80
 
-WORKDIR /srv/app
+RUN groupadd --gid 1000 python && \
+    useradd --uid 1000 --gid python --shell /bin/bash --create-home python
 
 RUN apt-get clean \
     && apt-get -y update \
     && apt-get -y install \
+    weasyprint \
     build-essential \
     python3-dev \
-    weasyprint \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt requirements.txt
+USER python
 
-RUN pip install -r requirements.txt --src /usr/local/src \
-    && apt-get -y remove \
-    build-essential \
-    python3-dev
+WORKDIR /home/python/app
 
-####################### DEV IMAGE ########################
+ENV PATH=/home/python/.local/bin:$PATH
+ENV PYTHONPATH=/home/python/.local/lib/python3.12/site-packages:$PYTHONPATH
+
+COPY --chown=python:python requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+####################### DEV IMAGE #########################
 
 FROM base AS development
 
 # source code is not copied because it is supposed to be
 # bind mounted as a volume.
 
-CMD [ "flask", "--app", "main", "run", "--host", "0.0.0.0", "--port", "80", "--debug" ]
+CMD [ "flask", "run", "--host", "0.0.0.0", "--port", "80", "--debug" ]
 
-####################### PROD IMAGE #######################
+####################### PROD IMAGE ########################
 
 FROM base AS production
 
-COPY . .
+ENV ENVIRONMENT=production
 
-CMD [ "flask", "--app", "main", "run", "--host", "0.0.0.0", "--port", "80" ]
+USER root
+
+RUN apt-get clean \
+    && apt-get -y update \
+    && apt-get -y install nginx=1.22.* sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "python ALL=(ALL) NOPASSWD: /usr/sbin/service nginx start" \
+    >> /etc/sudoers
+
+COPY --chown=python:python . .
+
+RUN mv ./deployment/nginx.conf /etc/nginx/ \
+    && chmod +x ./deployment/start.sh
+
+USER python
+
+CMD [ "./deployment/start.sh" ]
