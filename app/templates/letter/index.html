@@ -1,0 +1,51 @@
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Bon de commande</title>
+  <link href="{{ stylesheet_url }}" rel="stylesheet">
+  <meta name="description" content="Letter demo sample">
+</head>
+
+<body>
+  <header>
+    <div>
+      <img src="{{ logo_url }}" alt="">
+    </div>
+  </header>
+
+  <div>
+    <p>Cher {{ recipient_name }},</p>
+    <p>{{ body }}</p>
+    <p>{{ author_name }}</p>
+  </div>
+
+  <hr>
+
+  <div>
+    <form method="post">
+      <fieldset>
+        <legend>Bon de commande</legend>
+        <label for="name">Nom :</label>
+        <input type="text" name="name" id="name">
+
+        <label for="firstname">Prénom :</label>
+        <input type="text" name="firstname" id="firstname">
+
+        <label for="address">Adresse :</label>
+        <textarea name="address" id="address" rows="2" cols="40"></textarea>
+
+        <label for="products">Produits souhaités :</label>
+        <textarea name="products" id="products" rows="4" cols="40"></textarea>
+      </fieldset>
+      <input type="submit" name="submit" value="Envoyer">
+    </form>
+  </div>
+
+  <footer>
+    <p>AMAP - Des couleurs dans l'assiette - 53 Avenue du Panier Rouge - 69005 Lyon</p>
+  </footer>
+
+</body>
+
+</html>

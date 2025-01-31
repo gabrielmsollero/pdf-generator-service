@@ -30,3 +30,15 @@ Content-Type: application/json
         }
     ]
 }
+
+###
+
+# @name generateDummyLetter
+POST http://{{host}}/letter
+Content-Type: application/json
+
+{
+    "recipient_name": "Lisa Simpson",
+    "body": "Lorem ipsum dolor sit amet",
+    "author_name": "James Bond"
+}
