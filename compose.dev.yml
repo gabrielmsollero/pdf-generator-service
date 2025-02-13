@@ -6,4 +6,4 @@ services:
     build:
       target: development
     volumes:
-      - ./app:/home/python/app/
+      - ./:/home/python/app/
